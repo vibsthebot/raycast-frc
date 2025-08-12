@@ -8,15 +8,30 @@
   "license": "MIT",
   "commands": [
     {
-      "name": "frc",
-      "title": "frc",
-      "description": "",
+      "name": "frc-team",
+      "title": "FRC Team",
+      "description": "Get information about a specific FRC team",
       "mode": "view",
       "arguments": [
         {
           "name": "team",
           "placeholder": "Team Number",
-          "type": "text"
+          "type": "text",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "frc-event",
+      "title": "FRC Event",
+      "description": "Get information about a specific FRC event",
+      "mode": "view",
+      "arguments": [
+        {
+          "name": "event",
+          "placeholder": "Event ID",
+          "type": "text",
+          "required": true
         }
       ]
     }
