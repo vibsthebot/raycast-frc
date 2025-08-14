@@ -1,7 +1,7 @@
 {
   "$schema": "https://www.raycast.com/schemas/extension.json",
   "name": "raycast-frc",
-  "title": "Raycast FRC",
+  "title": "Raycast Frc",
   "description": "Robotics Stats for FIRST Robotics Competition",
   "icon": "icon.png",
   "author": "vibsthebot",
@@ -9,7 +9,7 @@
   "commands": [
     {
       "name": "frc-team",
-      "title": "FRC Team",
+      "title": "Frc Team",
       "description": "Get information about a specific FRC team",
       "mode": "view",
       "arguments": [
@@ -23,7 +23,7 @@
     },
     {
       "name": "frc-event",
-      "title": "FRC Event",
+      "title": "Frc Event",
       "description": "Get information about a specific FRC event",
       "mode": "view",
       "arguments": [
