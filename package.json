@@ -3,7 +3,7 @@
   "name": "raycast-frc",
   "title": "Raycast FRC",
   "description": "Robotics Stats for FIRST Robotics Competition",
-  "icon": "extension-icon.png",
+  "icon": "icon.png",
   "author": "vibsthebot",
   "license": "MIT",
   "commands": [
