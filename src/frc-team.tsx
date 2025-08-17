@@ -140,14 +140,21 @@ ${teamData?.district ? `As a member of the ${getDistrictName(teamData.district)}
           events: [],
         });
         const statboticsResponse = await fetch(`https://api.statbotics.io/v3/team_year/${team}/${year}`);
-        const statboticsData = (await statboticsResponse.json()) as any;
+        type StatboticsData = {
+          district?: string;
+          epa?: { total_points?: { mean?: number } };
+          record?: { wins?: number; losses?: number; ties?: number };
+          district_points?: number;
+          district_rank?: number;
+        };
+        const statboticsData = (await statboticsResponse.json()) as StatboticsData;
 
         const eventListResponse = await fetch(`https://www.thebluealliance.com/api/v3/team/frc${team}/events/${year}`, {
           headers: {
             "X-TBA-Auth-Key": preferences.tbaApiKey,
           },
         });
-        const eventListRaw = (await eventListResponse.json()) as any[];
+        const eventListRaw = (await eventListResponse.json()) as Event[];
         let processedTeamData: TeamData = {
           nickname: tbaData.nickname ?? "",
           city: tbaData.city ?? "",
@@ -194,7 +201,8 @@ ${teamData?.district ? `As a member of the ${getDistrictName(teamData.district)}
             },
           );
 
-          const eventStatusData = (await eventStatus.json()) as any;
+          type EventStatusData = { overall_status_str?: string };
+          const eventStatusData = (await eventStatus.json()) as EventStatusData;
           const eventAwards = await fetch(
             `https://www.thebluealliance.com/api/v3/team/frc${team}/event/${event.key}/awards`,
             {
@@ -203,7 +211,7 @@ ${teamData?.district ? `As a member of the ${getDistrictName(teamData.district)}
               },
             },
           );
-          const eventAwardsData = (await eventAwards.json()) as any[];
+          const eventAwardsData = (await eventAwards.json()) as Award[];
 
           if (Array.isArray(eventAwardsData)) {
             event.team_awards = eventAwardsData.map((award: { name: string }) => award.name) || [];
@@ -225,7 +233,16 @@ ${teamData?.district ? `As a member of the ${getDistrictName(teamData.district)}
           if (Array.isArray(matchListData) && matchListData.length > 0) {
             for (const matchKey of matchListData) {
               const curMatch = await fetch(`https://api.statbotics.io/v3/match/${matchKey}`);
-              const curMatchData = (await curMatch.json()) as any;
+              type Alliance = { team_keys: string[] };
+              type MatchResult = { blue_score: number; red_score: number };
+              type MatchPred = { blue_score: number; red_score: number };
+              type CurMatchData = {
+                key: string;
+                alliances: { red: Alliance; blue: Alliance };
+                result: MatchResult;
+                pred: MatchPred;
+              };
+              const curMatchData = (await curMatch.json()) as CurMatchData;
               if (
                 curMatchData &&
                 curMatchData.key &&

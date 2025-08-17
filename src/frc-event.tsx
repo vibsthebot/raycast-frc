@@ -54,7 +54,10 @@ export default function Command({ arguments: { event } }: { arguments: Arguments
             "X-TBA-Auth-Key": preferences.tbaApiKey,
           },
         });
-        const awardsData = (await awardsResponse.json()) as any[];
+        const awardsData = (await awardsResponse.json()) as Array<{
+          name: string;
+          recipient_list: Array<{ team_key: string }>;
+        }>;
         const awards: Award[] = [];
         if (awardsData && Array.isArray(awardsData)) {
           for (const award of awardsData) {
@@ -92,7 +95,15 @@ export default function Command({ arguments: { event } }: { arguments: Arguments
         if (Array.isArray(matchListData) && matchListData.length > 0) {
           for (const matchKey of matchListData) {
             const curMatch = await fetch(`https://api.statbotics.io/v3/match/${matchKey}`);
-            const curMatchData = (await curMatch.json()) as any;
+            const curMatchData = (await curMatch.json()) as {
+              key: string;
+              alliances: {
+                red: { team_keys: string[] };
+                blue: { team_keys: string[] };
+              };
+              result: { blue_score: number; red_score: number };
+              pred: { blue_score: number; red_score: number };
+            };
             if (
               curMatchData &&
               curMatchData.key &&
@@ -162,7 +173,10 @@ export default function Command({ arguments: { event } }: { arguments: Arguments
       )}
 
       {eventData ? (
-        <List.Item title="Awards" detail={<List.Item.Detail markdown={awardsToMarkdown(eventData.awards, eventData)} />} />
+        <List.Item
+          title="Awards"
+          detail={<List.Item.Detail markdown={awardsToMarkdown(eventData.awards, eventData)} />}
+        />
       ) : (
         <List.Item title="Loading Awards..." />
       )}
@@ -194,7 +208,11 @@ function rankingsToMarkdown(rankings: Rankings): string {
         teamKey,
         rank: typeof qual.rank === "number" ? qual.rank : "",
         record:
-          qual && qual.record && typeof qual.record.wins === "number" && typeof qual.record.losses === "number" && typeof qual.record.ties === "number"
+          qual &&
+          qual.record &&
+          typeof qual.record.wins === "number" &&
+          typeof qual.record.losses === "number" &&
+          typeof qual.record.ties === "number"
             ? `${qual.record.wins}-${qual.record.losses}-${qual.record.ties}`
             : "",
         allianceStatus:
