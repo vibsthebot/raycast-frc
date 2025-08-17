@@ -12,12 +12,18 @@ Statistics for FIRST Robotics Competition right at your fingertips.
 - Beautiful, readable tables for matches and rankings
 - Uses The Blue Alliance and Statbotics APIs
 
-## Setup
+## Installation
+> This extension is not yet available on the Raycast Store, so you will have to manually install it using the command line. 
+```bash
+git clone https://github.com/vibsthebot/raycast-frc.git
+cd raycast-frc
 
-1. Install the extension in Raycast.
-2. Go to the extension preferences and enter your TBA API Key (get one from https://www.thebluealliance.com/account).
+npm install
+npm run build
+```
+Run the extension in raycast and enter your The Blue Alliance API Key (get one from https://www.thebluealliance.com/account).
 
-## Usage
+## Commands
 
 - **FRC Team**: Get data about a team, including the competitions it competed in, its epa (estimated points average), and its location (optionally specify a year to get the team's data in previous years).
 - **FRC Event**: Get event data including rankings, awards, and matches using the event key (e.g., `2025casj`, which corresponds to the 2025 Silicon Valley Regional).
