@@ -5,15 +5,11 @@ import { List } from "@raycast/api";
 import type { Award, Event, Match, Rankings } from "./frc-team";
 import { getMatchesTable } from "./frc-team";
 
-interface Arguments {
-  event: string;
-}
-
-const preferences = getPreferenceValues<{ tbaApiKey: string }>();
-
-export default function Command({ arguments: { event } }: { arguments: Arguments }) {
+const preferences = getPreferenceValues<Preferences.FrcEvent>();
+export default function Command({ arguments: { event } }: { arguments: Arguments.FrcEvent }) {
   const [eventData, setEventData] = useState<Event | null>(null);
   const [markdown, setMarkdown] = useState<string | null>(null);
+  const [eventExists, setEventExists] = useState<boolean>(true);
   const [rankings, setRankings] = useState<Rankings | null>(null);
 
   useEffect(() => {
@@ -28,7 +24,8 @@ export default function Command({ arguments: { event } }: { arguments: Arguments
         const data = (await response.json()) as Partial<Event>;
         if (!data || typeof data !== "object" || !data.key) {
           setMarkdown("# Invalid Event ID");
-          throw new Error("Invalid event data received");
+          setEventExists(false);
+          return;
         }
         setMarkdown(data.name ?? "");
         const eventData: Event = {
@@ -166,24 +163,28 @@ export default function Command({ arguments: { event } }: { arguments: Arguments
         }
         subtitle={eventData ? `${eventData.city}, ${eventData.state_prov}, ${eventData.country}` : ""}
       />
-      {eventData ? (
-        <List.Item title="Matches" detail={<List.Item.Detail markdown={getMatchesTable(eventData)} />} />
-      ) : (
-        <List.Item title="Loading Matches..." />
-      )}
+      {eventExists && (
+        <>
+          {eventData ? (
+            <List.Item title="Matches" detail={<List.Item.Detail markdown={getMatchesTable(eventData)} />} />
+          ) : (
+            <List.Item title="Loading Matches..." />
+          )}
 
-      {eventData ? (
-        <List.Item
-          title="Awards"
-          detail={<List.Item.Detail markdown={awardsToMarkdown(eventData.awards, eventData)} />}
-        />
-      ) : (
-        <List.Item title="Loading Awards..." />
-      )}
-      {rankings ? (
-        <List.Item title="Rankings" detail={<List.Item.Detail markdown={rankingsToMarkdown(rankings)} />} />
-      ) : (
-        <List.Item title="Loading Rankings..." />
+          {eventData ? (
+            <List.Item
+              title="Awards"
+              detail={<List.Item.Detail markdown={awardsToMarkdown(eventData.awards, eventData)} />}
+            />
+          ) : (
+            <List.Item title="Loading Awards..." />
+          )}
+          {rankings ? (
+            <List.Item title="Rankings" detail={<List.Item.Detail markdown={rankingsToMarkdown(rankings)} />} />
+          ) : (
+            <List.Item title="Loading Rankings..." />
+          )}
+        </>
       )}
     </List>
   );
