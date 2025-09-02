@@ -1,7 +1,7 @@
 import { ActionPanel, Action, List, Detail } from "@raycast/api";
 import { useState, useEffect } from "react";
 
-interface MatchData {
+export interface MatchData {
   matchId: number;
   match: {
     scores: {
@@ -18,15 +18,15 @@ interface MatchData {
     }[];
     matchNum: number;
     series: number;
-    tournamentLevel: string;
+    tournamentLevel?: string;
   };
 }
 
-export interface EventData {
+interface EventData {
   eventCode: string;
   name: string;
   start: string;
-  end: string; 
+  end: string;
   season: number;
   event: {
     name: string;
@@ -52,7 +52,7 @@ export interface EventData {
       totalPointsNp?: number;
     };
     rp?: number;
-  }
+  };
 }
 
 export interface TeamData {
@@ -186,9 +186,9 @@ query ExampleQuery($number: Int!, $season: Int!) {
         } else {
           setData(json.data.teamByNumber);
         }
-      } catch (err: any) {
+      } catch (error) {
         setTeamExists(false);
-        console.error("Fetch Error:", err);
+        console.error("Fetch Error:", error);
       }
     }
 
@@ -227,37 +227,44 @@ From ${data.location.city}, ${data.location.state}, ${data.location.country}
               <List.Section title="Events">
                 {data.events?.map((event) => (
                   <List.Item
-                  key={event.eventCode}
-                  title={event.event.name}
-                  subtitle={`${event.event.location.city}, ${event.event.location.state}`}
-                  actions={
-                    <ActionPanel>
-                    <Action.OpenInBrowser url={`https://ftcscout.org/events/2024/${event.eventCode}`} title="View Event on FTC Stats" />
-                    </ActionPanel>
-                  }
-                  detail={
-                    <List.Item.Detail
-                    markdown={`
+                    key={event.eventCode}
+                    title={event.event.name}
+                    subtitle={`${event.event.location.city}, ${event.event.location.state}`}
+                    actions={
+                      <ActionPanel>
+                        <Action.OpenInBrowser
+                          url={`https://ftcscout.org/events/2024/${event.eventCode}`}
+                          title="View Event on FTC Stats"
+                        />
+                      </ActionPanel>
+                    }
+                    detail={
+                      <List.Item.Detail
+                        markdown={`
 # ${event.event.name}
 
-${event.event.location.venue === null ? '' : `${event.event.location.venue}, `}${event.event.location.city}, ${event.event.location.state}, ${event.event.location.country}
+${event.event.location.venue === null ? "" : `${event.event.location.venue}, `}${event.event.location.city}, ${event.event.location.state}, ${event.event.location.country}
 
 (${event.eventCode})
 
-${event.stats ? `
+${
+  event.stats
+    ? `
 Rank **${event.stats.rank}** (quals)
 
 WLT: **${event.stats.wins}-${event.stats.losses}-${event.stats.ties}**
 
 **${event.stats.rp?.toFixed(2)}** RP · **${event.stats.opr?.totalPointsNp?.toFixed(2)}** npOPR · **${event.stats.avg?.totalPointsNp?.toFixed(2)}** npAVG
-` : ''}
+`
+    : ""
+}
 
 ${getAwardsFTC(data.awards, event.eventCode)}
 
 ${getFTCMatchesTable(event.event.teamMatches, team, event.eventCode)}
         `}
-                    />
-                  }
+                      />
+                    }
                   />
                 ))}
               </List.Section>
@@ -273,24 +280,29 @@ ${getFTCMatchesTable(event.event.teamMatches, team, event.eventCode)}
   );
 }
 
-export function getFTCMatchesTable(matches: MatchData[], team?: string, eventCode?: string): string {
+function getFTCMatchesTable(matches: MatchData[], team?: string, eventCode?: string): string {
   if (!matches || matches.length === 0) return "No matches found.";
-
-  const doubleElim = matches.filter((m) => m.match.tournamentLevel === "DoubleElim");
-  const qual = matches.filter((m) => m.match.tournamentLevel === "Quals");
-  const finals = matches.filter((m) => m.match.tournamentLevel === "Finals");
+  const doubleElim = matches
+    .filter((m) => m.match.tournamentLevel === "DoubleElim")
+    .sort((a, b) => a.match.matchNum - b.match.matchNum);
+  const qual = matches
+    .filter((m) => m.match.tournamentLevel === "Quals")
+    .sort((a, b) => a.match.matchNum - b.match.matchNum);
+  const finals = matches
+    .filter((m) => m.match.tournamentLevel === "Finals")
+    .sort((a, b) => a.match.matchNum - b.match.matchNum);
   function tableSection(sectionMatches: MatchData[], sectionTitle: string) {
     if (sectionMatches.length === 0) return "";
     let md = `\n### ${sectionTitle}\n`;
-    md += '|  Match Num  | Red Teams | Blue Teams | Red Score | Blue Score |\n';
-    md += '|-------------|-----------|------------|-----------|------------|\n';
+    md += "|  Match Num  | Red Teams | Blue Teams | Red Score | Blue Score |\n";
+    md += "|-------------|-----------|------------|-----------|------------|\n";
     md += sectionMatches
       .map((match) => {
         const redScore = match.match.scores?.red?.totalPoints;
         const blueScore = match.match.scores?.blue?.totalPoints;
-        let redDisplay = redScore ?? '-';
-        let blueDisplay = blueScore ?? '-';
-        if (typeof redScore === 'number' && typeof blueScore === 'number') {
+        let redDisplay = redScore ?? "-";
+        let blueDisplay = blueScore ?? "-";
+        if (typeof redScore === "number" && typeof blueScore === "number") {
           if (redScore > blueScore) {
             redDisplay = `**${redScore}**`;
           } else if (blueScore > redScore) {
@@ -298,31 +310,31 @@ export function getFTCMatchesTable(matches: MatchData[], team?: string, eventCod
           }
         }
         const matchNumLabel =
-          match.match.tournamentLevel == 'DoubleElim'
-            ? `Elims ${match.match.series}`
+          match.match.tournamentLevel == "DoubleElim"
+            ? `Elims ${match.match.matchNum}`
             : `${match.match.tournamentLevel} ${match.match.matchNum}`;
-        const matchLink = eventCode
+        const matchLink = team
           ? `[${matchNumLabel}](https://ftcscout.org/teams/${team}?scores=${eventCode}-${match.match.matchNum}#${eventCode})`
-          : matchNumLabel;
+          : `[${matchNumLabel}](https://ftcscout.org/matches/${eventCode}/scores=${eventCode}-${match.match.matchNum}#${eventCode})`;
         const redTeams = match.match.teams
-          .filter((t) => t.alliance === 'Red')
+          .filter((t) => t.alliance === "Red")
           .map((t) =>
             eventCode
               ? `[${t.teamNumber}](https://ftcscout.org/teams/${t.teamNumber}#${eventCode})`
-              : `${t.teamNumber}`
+              : `${t.teamNumber}`,
           )
-          .join(', ');
+          .join(", ");
         const blueTeams = match.match.teams
-          .filter((t) => t.alliance === 'Blue')
+          .filter((t) => t.alliance === "Blue")
           .map((t) =>
             eventCode
               ? `[${t.teamNumber}](https://ftcscout.org/teams/${t.teamNumber}#${eventCode})`
-              : `${t.teamNumber}`
+              : `${t.teamNumber}`,
           )
-          .join(', ');
+          .join(", ");
         return `| ${matchLink} | ${redTeams} | ${blueTeams} | ${redDisplay} | ${blueDisplay} |`;
       })
-      .join('\n');
+      .join("\n");
     return md;
   }
 
@@ -335,13 +347,17 @@ export function getFTCMatchesTable(matches: MatchData[], team?: string, eventCod
 
 export function getAwardsFTC(awards: { eventCode: string; type: string }[], event: string): string {
   if (!awards || awards.length === 0) return "";
-  let types: string[] = [];
+  const types: string[] = [];
   for (const award of awards) {
     if (award.eventCode === event) {
-      const regularCaseType = award.type.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase()).trim();
-      const formattedType = regularCaseType.endsWith('Winner') || regularCaseType.endsWith('Finalist') 
-        ? `**${regularCaseType}**` 
-        : `**${regularCaseType} Award** Winner`;
+      const regularCaseType = award.type
+        .replace(/([A-Z])/g, " $1")
+        .replace(/^./, (str) => str.toUpperCase())
+        .trim();
+      const formattedType =
+        regularCaseType.endsWith("Winner") || regularCaseType.endsWith("Finalist")
+          ? `**${regularCaseType}**`
+          : `**${regularCaseType} Award** Winner`;
       types.push(formattedType);
     }
   }

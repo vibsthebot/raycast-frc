@@ -56,20 +56,6 @@
       ]
     },
     {
-      "name": "ftc-event",
-      "title": "FTC Event",
-      "description": "Get information about a specific FTC event",
-      "mode": "view",
-      "arguments": [
-        {
-          "name": "event",
-          "placeholder": "Event ID",
-          "type": "text",
-          "required": true
-        }
-      ]
-    },
-    {
       "name": "ftc-search",
       "title": "FTC Search",
       "description": "Search for FTC teams",
