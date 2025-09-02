@@ -1,3 +1,7 @@
+import { Action, ActionPanel, Detail, List } from "@raycast/api";
+import { useEffect, useState } from "react";
+import { getPreferenceValues } from "@raycast/api";
+
 export interface TeamStatus {
   qual?: {
     ranking?: {
@@ -10,14 +14,6 @@ export interface TeamStatus {
 }
 
 export type Rankings = Record<string, TeamStatus>;
-import { Detail, List } from "@raycast/api";
-import { useEffect, useState } from "react";
-import { getPreferenceValues } from "@raycast/api";
-
-interface Arguments {
-  team: string;
-  year?: string;
-}
 
 export interface Award {
   name: string;
@@ -89,15 +85,17 @@ function getDistrictName(code: string): string | null {
   return districtMap[code.toUpperCase()] || null;
 }
 
-const preferences = getPreferenceValues<{ tbaApiKey: string }>();
+const preferences = getPreferenceValues<Preferences.FrcEvent>();
 
-export default function Command({ arguments: { team, year: yearArg } }: { arguments: Arguments }) {
+export default function Command({ arguments: { team, year: yearArg } }: { arguments: Arguments.FrcTeam }) {
   if (!team || isNaN(Number(team))) {
     console.log(Number(team));
     return <Detail markdown="# Invalid Team Number" />;
   }
   const [teamData, setTeamData] = useState<TeamData | null>(null);
+  const [teamExists, setTeamExists] = useState<boolean>(true);
   const year = yearArg && !isNaN(Number(yearArg)) ? Number(yearArg) : new Date().getFullYear();
+
   const markdown = `
 # Team ${team}${teamData ? ` - ${teamData.nickname}` : ""}  
 <img src="https://www.thebluealliance.com/avatar/${year}/frc${team}.png" width="40" />
@@ -124,6 +122,10 @@ ${teamData?.district ? `As a member of the ${getDistrictName(teamData.district)}
           },
         });
         const tbaData = (await tbaResponse.json()) as Partial<TeamData>;
+        if (!tbaData || !tbaData.nickname) {
+          setTeamExists(false);
+          return;
+        }
         setTeamData({
           nickname: tbaData.nickname ?? "",
           city: tbaData.city ?? "",
@@ -316,46 +318,70 @@ ${teamData?.district ? `As a member of the ${getDistrictName(teamData.district)}
   }, [team]);
 
   return (
-    <List isShowingDetail={true} filtering={false}>
-      <List.Item
-        title={`Team ${team}`}
-        detail={<List.Item.Detail markdown={markdown} />}
-        subtitle={teamData && teamData.epa ? `EPA: ${teamData.epa}` : ""}
-      />
-      {teamData?.events && Object.keys(teamData.events).length > 0 ? (
-        <List.Section title="Events">
-          {teamData.events.map((event, index) => (
-            <List.Item
-              key={index}
-              title={event.name}
-              subtitle={`${event.city}, ${event.state_prov}`}
-              detail={
-                <List.Item.Detail
-                  markdown={`
+    <>
+      {teamExists ? (
+        <List isShowingDetail={true} filtering={false}>
+          {teamData ? (
+            <>
+              <List.Item
+                title={`Team ${team}`}
+                detail={<List.Item.Detail markdown={markdown} />}
+                subtitle={teamData?.epa ? `EPA: ${teamData.epa}` : ""}
+                actions={
+                  <ActionPanel>
+                    <Action.OpenInBrowser url={`https://statbotics.io/team/${team}`} title="Open Statbotics" />
+                  </ActionPanel>
+                }
+              />
+              {teamData.events && teamData.events.length > 0 ? (
+                <List.Section title="Events">
+                  {teamData.events.map((event, index) => (
+                    <List.Item
+                      key={index}
+                      title={event.name}
+                      subtitle={`${event.city}, ${event.state_prov}`}
+                      actions={
+                        <ActionPanel>
+                          <Action.OpenInBrowser
+                            url={`https://statbotics.io/event/${event.key}`}
+                            title="Open Statbotics"
+                          />
+                        </ActionPanel>
+                      }
+                      detail={
+                        <List.Item.Detail
+                          markdown={`
 # ${event.name}
 
 [${event.city}, ${event.state_prov}, ${event.country}](${event.gmaps_url})
 
 (${event.key}) - [View on TBA](https://www.thebluealliance.com/event/${event.key}) / [View on Statbotics](https://api.statbotics.io/v3/event/${event.key})
 
-
-
 ${htmlToMarkdown(event.status)}
 
-${event.team_awards && event.team_awards.length > 0 ? "They also won the following awards: \n * " + event.team_awards.join("\n * ") : ""}
+${event.team_awards?.length > 0 ? "They also won the following awards:\n * " + event.team_awards.join("\n * ") : ""}
 
-${getMatchesTable(event)}`}
-                />
-              }
-            />
-          ))}
-        </List.Section>
+${getMatchesTable(event)}
+                        `}
+                        />
+                      }
+                    />
+                  ))}
+                </List.Section>
+              ) : (
+                <List.Section title="Events">
+                  <List.Item title="Loading..." />
+                </List.Section>
+              )}
+            </>
+          ) : (
+            <List.Item title={`Team ${team}`} subtitle="Loading..." />
+          )}
+        </List>
       ) : (
-        <List.Section title="Events">
-          <List.Item title="Loading..." />
-        </List.Section>
+        <Detail markdown="# Invalid Team Number" />
       )}
-    </List>
+    </>
   );
 }
 
@@ -393,7 +419,7 @@ export function getMatchesTable(event: Event): string {
       const trimmedKey = match.key.replace(/^[^_]+_/, "");
       const qmMatch = trimmedKey.match(/^qm(\d+)/);
       const matchName = qmMatch ? `Quals ${qmMatch[1]}` : trimmedKey;
-      table += `| [${matchName}](https://statbotics.io/match/${match.key}) | ${match.red1}, ${match.red2}, ${match.red3} | ${match.blue1}, ${match.blue2}, ${match.blue3} | ${match.predRed > match.predBlue ? `**${match.predRed}**` : match.predRed} | ${match.predBlue > match.predRed ? `**${match.predBlue}**` : match.predBlue} | ${match.scoreRed > match.scoreBlue ? `**${match.scoreRed}**` : match.scoreRed} | ${match.scoreBlue > match.scoreRed ? `**${match.scoreBlue}**` : match.scoreBlue} |\n`;
+      table += `| [${matchName}](https://statbotics.io/match/${match.key}) | [${match.red1}](https://statbotics.io/team/${match.red1}), [${match.red2}](https://statbotics.io/team/${match.red2}), [${match.red3}](https://statbotics.io/team/${match.red3}) | [${match.blue1}](https://statbotics.io/team/${match.blue1}), [${match.blue2}](https://statbotics.io/team/${match.blue2}), [${match.blue3}](https://statbotics.io/team/${match.blue3}) | ${match.predRed > match.predBlue ? `**${match.predRed}**` : match.predRed} | ${match.predBlue > match.predRed ? `**${match.predBlue}**` : match.predBlue} | ${match.scoreRed > match.scoreBlue ? `**${match.scoreRed}**` : match.scoreRed} | ${match.scoreBlue > match.scoreRed ? `**${match.scoreBlue}**` : match.scoreBlue} |\n`;
     }
   }
   const sfs = matches.filter((m) => m.key.replace(/^[^_]+_/, "").startsWith("sf"));
@@ -414,7 +440,7 @@ export function getMatchesTable(event: Event): string {
       const trimmedKey = match.key.replace(/^[^_]+_/, "");
       const sfMatch = trimmedKey.match(/^sf\d+m(\d+)/);
       const matchName = sfMatch ? `Match ${trimmedKey[2]}` : trimmedKey;
-      table += `| [${matchName}](https://statbotics.io/match/${match.key}) | ${match.red1}, ${match.red2}, ${match.red3} | ${match.blue1}, ${match.blue2}, ${match.blue3} | ${match.predRed > match.predBlue ? `**${match.predRed}**` : match.predRed} | ${match.predBlue > match.predRed ? `**${match.predBlue}**` : match.predBlue} | ${match.scoreRed > match.scoreBlue ? `**${match.scoreRed}**` : match.scoreRed} | ${match.scoreBlue > match.scoreRed ? `**${match.scoreBlue}**` : match.scoreBlue} |\n`;
+      table += `| [${matchName}](https://statbotics.io/match/${match.key}) | [${match.red1}](https://statbotics.io/team/${match.red1}), [${match.red2}](https://statbotics.io/team/${match.red2}), [${match.red3}](https://statbotics.io/team/${match.red3}) | [${match.blue1}](https://statbotics.io/team/${match.blue1}), [${match.blue2}](https://statbotics.io/team/${match.blue2}), [${match.blue3}](https://statbotics.io/team/${match.blue3}) | ${match.predRed > match.predBlue ? `**${match.predRed}**` : match.predRed} | ${match.predBlue > match.predRed ? `**${match.predBlue}**` : match.predBlue} | ${match.scoreRed > match.scoreBlue ? `**${match.scoreRed}**` : match.scoreRed} | ${match.scoreBlue > match.scoreRed ? `**${match.scoreBlue}**` : match.scoreBlue} |\n`;
     }
   }
   const finals = matches.filter((m) => m.key.replace(/^[^_]+_/, "").startsWith("f"));
@@ -438,7 +464,7 @@ export function getMatchesTable(event: Event): string {
       const trimmedKey = match.key.replace(/^[^_]+_/, "");
       const fMatch = trimmedKey.match(/^f\d+m(\d+)/);
       const matchName = fMatch ? `Finals ${fMatch[1]}` : trimmedKey;
-      table += `| [${matchName}](https://statbotics.io/match/${match.key}) | ${match.red1}, ${match.red2}, ${match.red3} | ${match.blue1}, ${match.blue2}, ${match.blue3} | ${match.predRed > match.predBlue ? `**${match.predRed}**` : match.predRed} | ${match.predBlue > match.predRed ? `**${match.predBlue}**` : match.predBlue} | ${match.scoreRed > match.scoreBlue ? `**${match.scoreRed}**` : match.scoreRed} | ${match.scoreBlue > match.scoreRed ? `**${match.scoreBlue}**` : match.scoreBlue} |\n`;
+      table += `| [${matchName}](https://statbotics.io/match/${match.key}) | [${match.red1}](https://statbotics.io/team/${match.red1}), [${match.red2}](https://statbotics.io/team/${match.red2}), [${match.red3}](https://statbotics.io/team/${match.red3}) | [${match.blue1}](https://statbotics.io/team/${match.blue1}), [${match.blue2}](https://statbotics.io/team/${match.blue2}), [${match.blue3}](https://statbotics.io/team/${match.blue3}) | ${match.predRed > match.predBlue ? `**${match.predRed}**` : match.predRed} | ${match.predBlue > match.predRed ? `**${match.predBlue}**` : match.predBlue} | ${match.scoreRed > match.scoreBlue ? `**${match.scoreRed}**` : match.scoreRed} | ${match.scoreBlue > match.scoreRed ? `**${match.scoreBlue}**` : match.scoreBlue} |\n`;
     }
   }
   return table;

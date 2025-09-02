@@ -40,6 +40,26 @@
           "required": true
         }
       ]
+    },
+    {
+      "name": "ftc-team",
+      "title": "FTC Team",
+      "description": "Get information about a specific FTC team",
+      "mode": "view",
+      "arguments": [
+        {
+          "name": "team",
+          "placeholder": "Team Number",
+          "type": "text",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "ftc-search",
+      "title": "FTC Search",
+      "description": "Search for FTC teams",
+      "mode": "view"
     }
   ],
   "dependencies": {
