@@ -1,9 +1,55 @@
 import { useEffect, useState } from "react";
 import { format } from "date-fns";
-import { getPreferenceValues } from "@raycast/api";
+import {
+  getPreferenceValues,
+  Cache,
+  ActionPanel,
+  Action,
+  Keyboard,
+} from "@raycast/api";
 import { List } from "@raycast/api";
 import type { Award, Event, Match, Rankings } from "./frc-team";
 import { getMatchesTable } from "./frc-team";
+import { showFailureToast } from "@raycast/utils";
+
+const cache = new Cache();
+
+function getCachedData<T>(key: string, ttlMinutes: number = 5): T | null {
+  const cached = cache.get(key);
+  const timestampKey = `${key}_timestamp`;
+  const timestamp = cache.get(timestampKey);
+
+  if (cached && timestamp) {
+    try {
+      const data = JSON.parse(cached) as T;
+      const cacheTime = parseInt(timestamp);
+      const now = Date.now();
+      const ttlMs = ttlMinutes * 60 * 1000;
+
+      if (now - cacheTime < ttlMs) {
+        return data;
+      } else {
+        cache.remove(key);
+        cache.remove(timestampKey);
+      }
+    } catch (error) {
+      console.error(`Error parsing cached data for key ${key}:`, error);
+      cache.remove(key);
+      cache.remove(timestampKey);
+    }
+  }
+  return null;
+}
+
+function setCachedData<T>(key: string, data: T): void {
+  try {
+    const timestampKey = `${key}_timestamp`;
+    cache.set(key, JSON.stringify(data));
+    cache.set(timestampKey, Date.now().toString());
+  } catch (error) {
+    console.error(`Error caching data for key ${key}:`, error);
+  }
+}
 
 const preferences = getPreferenceValues<Preferences.FrcEvent>();
 export default function Command({
@@ -12,15 +58,25 @@ export default function Command({
   arguments: Arguments.FrcEvent;
 }) {
   const [eventData, setEventData] = useState<Event | null>(null);
-  const [markdown, setMarkdown] = useState<string | null>(null);
-  const [eventExists, setEventExists] = useState<boolean>(true);
   const [rankings, setRankings] = useState<Rankings | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
 
   useEffect(() => {
-    setMarkdown("# Loading...");
+    setIsLoading(true);
     async function fetchData() {
       try {
-        const response = await fetch(
+        const cacheKey = `event-${event}`;
+        const cachedEventData = getCachedData<Event>(cacheKey);
+        const cachedRankings = getCachedData<Rankings>(`rankings-${event}`);
+
+        if (cachedEventData && cachedRankings) {
+          setEventData(cachedEventData);
+          setRankings(cachedRankings);
+          setIsLoading(false);
+          return;
+        }
+
+        const eventResponse = await fetch(
           `https://www.thebluealliance.com/api/v3/event/${event}`,
           {
             headers: {
@@ -28,145 +84,225 @@ export default function Command({
             },
           },
         );
-        const data = (await response.json()) as Partial<Event>;
-        if (!data || typeof data !== "object" || !data.key) {
-          setMarkdown("# Invalid Event ID");
-          setEventExists(false);
+
+        if (!eventResponse.ok) {
+          if (eventResponse.status === 401) {
+            await showFailureToast(new Error("Invalid TBA API Key"), {
+              title: "Please check your API key in preferences",
+            });
+          } else {
+            await showFailureToast(
+              new Error(`API Error ${eventResponse.status}`),
+              {
+                title: "Failed to fetch event data",
+              },
+            );
+          }
+          setIsLoading(false);
           return;
         }
-        setMarkdown(data.name ?? "");
-        const eventData: Event = {
-          key: data.key ?? "",
-          name: data.name ?? "",
-          city: data.city ?? "",
-          state_prov: data.state_prov ?? "",
-          start_date: data.start_date ?? "",
-          end_date: data.end_date ?? "",
-          country: data.country ?? "",
+
+        const eventData = (await eventResponse.json()) as Partial<Event>;
+        console.log(eventData);
+        if (!eventData || typeof eventData !== "object" || !eventData.key) {
+          setIsLoading(false);
+          return;
+        }
+
+        const eventObj: Event = {
+          key: eventData.key ?? "",
+          name: eventData.name ?? "",
+          city: eventData.city ?? "",
+          state_prov: eventData.state_prov ?? "",
+          start_date: eventData.start_date ?? "",
+          end_date: eventData.end_date ?? "",
+          country: eventData.country ?? "",
           matches: [],
           status: "",
           team_awards: [],
-          gmaps_place_id: data.gmaps_place_id ?? "",
-          gmaps_url: data.gmaps_url ?? "",
-          gmaps_location_name: data.gmaps_location_name ?? "",
+          gmaps_place_id: eventData.gmaps_place_id ?? "",
+          gmaps_url: eventData.gmaps_url ?? "",
+          gmaps_location_name: eventData.gmaps_location_name ?? "",
           awards: [],
           teams: [],
         };
-        setEventData(eventData);
-        const awardsResponse = await fetch(
-          `https://www.thebluealliance.com/api/v3/event/${event}/awards`,
-          {
-            headers: {
-              "X-TBA-Auth-Key": preferences.tbaApiKey,
-            },
-          },
-        );
+
+        const [awardsResponse, rankingsResponse, matchKeysResponse] =
+          await Promise.all([
+            fetch(
+              `https://www.thebluealliance.com/api/v3/event/${event}/awards`,
+              {
+                headers: { "X-TBA-Auth-Key": preferences.tbaApiKey },
+              },
+            ),
+            fetch(
+              `https://www.thebluealliance.com/api/v3/event/${event}/teams/statuses`,
+              {
+                headers: { "X-TBA-Auth-Key": preferences.tbaApiKey },
+              },
+            ),
+            fetch(
+              `https://www.thebluealliance.com/api/v3/event/${event}/matches/keys`,
+              {
+                headers: { "X-TBA-Auth-Key": preferences.tbaApiKey },
+              },
+            ),
+          ]);
+
+        if (
+          !awardsResponse.ok ||
+          !rankingsResponse.ok ||
+          !matchKeysResponse.ok
+        ) {
+          const failedResponse = !awardsResponse.ok
+            ? awardsResponse
+            : !rankingsResponse.ok
+              ? rankingsResponse
+              : matchKeysResponse;
+
+          if (failedResponse.status === 401) {
+            await showFailureToast(new Error("Invalid TBA API Key"), {
+              title: "Please check your API key in preferences",
+            });
+          } else {
+            await showFailureToast(
+              new Error(`API Error ${failedResponse.status}`),
+              {
+                title: "Failed to fetch event details",
+              },
+            );
+          }
+          setIsLoading(false);
+          return;
+        }
+
         const awardsData = (await awardsResponse.json()) as Array<{
           name: string;
           recipient_list: Array<{ team_key: string }>;
         }>;
         const awards: Award[] = [];
-        if (awardsData && Array.isArray(awardsData)) {
-          for (const award of awardsData) {
-            if (award.recipient_list && Array.isArray(award.recipient_list)) {
-              for (const recipient of award.recipient_list) {
-                awards.push({
-                  name: award.name,
-                  team: recipient.team_key,
-                });
+        if (Array.isArray(awardsData)) {
+          awardsData
+            .filter(
+              (award) =>
+                award.recipient_list && Array.isArray(award.recipient_list),
+            )
+            .flatMap((award) =>
+              award.recipient_list.map((recipient) => ({
+                name: award.name,
+                team: recipient.team_key,
+              })),
+            )
+            .forEach((award) => awards.push(award));
+        }
+        eventObj.awards = awards;
+
+        let rankings: Rankings | null = null;
+        try {
+          rankings = (await rankingsResponse.json()) as Rankings;
+          setRankings(rankings);
+          setEventData({ ...eventObj, awards: eventObj.awards });
+        } catch (error) {
+          await showFailureToast(error, {
+            title: "Failed to load event rankings",
+          });
+        }
+
+        const matchKeysData = (await matchKeysResponse.json()) as string[];
+        const matches: Match[] = [];
+        let matchErrorCount = 0;
+
+        if (Array.isArray(matchKeysData) && matchKeysData.length > 0) {
+          const batchSize = 10;
+          for (let i = 0; i < matchKeysData.length; i += batchSize) {
+            const batch = matchKeysData.slice(i, i + batchSize);
+            const matchPromises = batch.map(async (matchKey) => {
+              try {
+                const response = await fetch(
+                  `https://api.statbotics.io/v3/match/${matchKey}`,
+                );
+                return await response.json();
+              } catch (error) {
+                console.error(`Error fetching match ${matchKey}:`, error);
+                matchErrorCount++;
+                return null;
               }
+            });
+
+            const matchResults = await Promise.all(matchPromises);
+
+            const newMatches = matchResults
+              .filter(
+                (curMatchData) =>
+                  curMatchData?.key &&
+                  curMatchData.alliances?.red?.team_keys?.length >= 3 &&
+                  curMatchData.alliances?.blue?.team_keys?.length >= 3 &&
+                  curMatchData.result &&
+                  curMatchData.pred,
+              )
+              .map((curMatchData) => {
+                const { alliances, result, pred } = curMatchData;
+                return {
+                  key: curMatchData.key,
+                  red1: alliances.red.team_keys[0],
+                  red2: alliances.red.team_keys[1],
+                  red3: alliances.red.team_keys[2],
+                  blue1: alliances.blue.team_keys[0],
+                  blue2: alliances.blue.team_keys[1],
+                  blue3: alliances.blue.team_keys[2],
+                  scoreBlue: result.blue_score,
+                  scoreRed: result.red_score,
+                  predBlue: Math.round(pred.blue_score),
+                  predRed: Math.round(pred.red_score),
+                } as Match;
+              });
+
+            matches.push(...newMatches);
+
+            if (newMatches.length > 0) {
+              setEventData({ ...eventObj, matches: [...matches] });
             }
           }
         }
-        eventData.awards = awards;
-        setEventData(eventData);
 
-        try {
-          const rankingsResponse = await fetch(
-            `https://www.thebluealliance.com/api/v3/event/${event}/teams/statuses`,
+        eventObj.matches = matches;
+        setEventData(eventObj);
+
+        if (matchErrorCount > 0) {
+          await showFailureToast(
+            new Error(`Failed to load ${matchErrorCount} matches`),
             {
-              headers: {
-                "X-TBA-Auth-Key": preferences.tbaApiKey,
-              },
+              title: "Some match data may be incomplete",
             },
           );
-          const rankingsData = (await rankingsResponse.json()) as Rankings;
-          setRankings(rankingsData);
-        } catch (error) {
-          console.error("Error fetching rankings:", error);
         }
-        const matchList = await fetch(
-          `https://www.thebluealliance.com/api/v3/event/${event}/matches/keys`,
-          {
-            headers: {
-              "X-TBA-Auth-Key": preferences.tbaApiKey,
-            },
-          },
-        );
-        const matchListData = (await matchList.json()) as string[];
-        const matches: Match[] = [];
-        if (Array.isArray(matchListData) && matchListData.length > 0) {
-          for (const matchKey of matchListData) {
-            const curMatch = await fetch(
-              `https://api.statbotics.io/v3/match/${matchKey}`,
-            );
-            const curMatchData = (await curMatch.json()) as {
-              key: string;
-              alliances: {
-                red: { team_keys: string[] };
-                blue: { team_keys: string[] };
-              };
-              result: { blue_score: number; red_score: number };
-              pred: { blue_score: number; red_score: number };
-            };
-            if (
-              curMatchData &&
-              curMatchData.key &&
-              curMatchData.alliances &&
-              curMatchData.alliances.red &&
-              curMatchData.alliances.blue &&
-              Array.isArray(curMatchData.alliances.red.team_keys) &&
-              Array.isArray(curMatchData.alliances.blue.team_keys) &&
-              curMatchData.alliances.red.team_keys.length >= 3 &&
-              curMatchData.alliances.blue.team_keys.length >= 3 &&
-              curMatchData.result &&
-              curMatchData.pred
-            ) {
-              const matchData: Match = {
-                key: curMatchData.key,
-                red1: curMatchData.alliances.red.team_keys[0],
-                red2: curMatchData.alliances.red.team_keys[1],
-                red3: curMatchData.alliances.red.team_keys[2],
-                blue1: curMatchData.alliances.blue.team_keys[0],
-                blue2: curMatchData.alliances.blue.team_keys[1],
-                blue3: curMatchData.alliances.blue.team_keys[2],
-                scoreBlue: curMatchData.result.blue_score,
-                scoreRed: curMatchData.result.red_score,
-                predBlue: Math.round(curMatchData.pred.blue_score),
-                predRed: Math.round(curMatchData.pred.red_score),
-              };
-              matches.push(matchData);
-            }
-          }
+
+        setCachedData(cacheKey, eventObj);
+        if (rankings) {
+          setCachedData(`rankings-${event}`, rankings);
         }
-        eventData.matches = matches;
-        setEventData(eventData);
+
+        setIsLoading(false);
       } catch (error) {
         console.error("Error fetching event data:", error);
+        await showFailureToast(error, {
+          title: "Failed to fetch event data. Please try again.",
+        });
+        setIsLoading(false);
       }
     }
     fetchData();
   }, [event]);
 
   return (
-    <List isShowingDetail={true} filtering={false}>
-      <List.Item
-        title={eventData ? eventData.name : "Event"}
-        detail={
-          <List.Item.Detail
-            markdown={
-              eventData
-                ? `# ${eventData.name}
+    <List isShowingDetail={true} filtering={false} isLoading={isLoading}>
+      {eventData && (
+        <>
+          <List.Item
+            title={eventData.name}
+            detail={
+              <List.Item.Detail
+                markdown={`# ${eventData.name}
 
 **Location:** [${eventData.city}, ${eventData.state_prov}, ${eventData.country}](${eventData.gmaps_url})
 
@@ -174,51 +310,85 @@ export default function Command({
 
 (${eventData.key}) - [View on TBA](https://www.thebluealliance.com/event/${eventData.key}) / [View on Statbotics](https://api.statbotics.io/v3/event/${eventData.key})
 
-`
-                : (markdown ?? "Loading...")
+`}
+              />
+            }
+            subtitle={`${eventData.city}, ${eventData.state_prov}, ${eventData.country}`}
+            actions={
+              <ActionPanel>
+                <Action.OpenInBrowser
+                  url={`https://www.thebluealliance.com/event/${eventData.key}`}
+                  title="Open in The Blue Alliance"
+                  shortcut={Keyboard.Shortcut.Common.Open}
+                />
+                <Action.OpenInBrowser
+                  url={`https://statbotics.io/event/${eventData.key}`}
+                  title="Open in Statbotics"
+                  shortcut={{ modifiers: ["cmd"], key: "s" }}
+                />
+                {eventData.gmaps_url && (
+                  <Action.OpenInBrowser
+                    url={eventData.gmaps_url}
+                    title="Open Location in Maps"
+                    shortcut={{ modifiers: ["cmd"], key: "m" }}
+                  />
+                )}
+              </ActionPanel>
             }
           />
-        }
-        subtitle={
-          eventData
-            ? `${eventData.city}, ${eventData.state_prov}, ${eventData.country}`
-            : ""
-        }
-      />
-      {eventExists && (
-        <>
-          {eventData ? (
-            <List.Item
-              title="Matches"
-              detail={
-                <List.Item.Detail markdown={getMatchesTable(eventData)} />
-              }
-            />
-          ) : (
-            <List.Item title="Loading Matches..." />
-          )}
 
-          {eventData ? (
-            <List.Item
-              title="Awards"
-              detail={
-                <List.Item.Detail
-                  markdown={awardsToMarkdown(eventData.awards, eventData)}
+          <List.Item
+            title="Matches"
+            detail={<List.Item.Detail markdown={getMatchesTable(eventData)} />}
+            actions={
+              <ActionPanel>
+                <Action.OpenInBrowser
+                  url={`https://www.thebluealliance.com/event/${eventData.key}#results`}
+                  title="View Matches on TBA"
+                  shortcut={Keyboard.Shortcut.Common.Open}
                 />
-              }
-            />
-          ) : (
-            <List.Item title="Loading Awards..." />
-          )}
-          {rankings ? (
+                <Action.OpenInBrowser
+                  url={`https://statbotics.io/event/${eventData.key}`}
+                  title="View Matches on Statbotics"
+                  shortcut={{ modifiers: ["cmd"], key: "s" }}
+                />
+              </ActionPanel>
+            }
+          />
+
+          <List.Item
+            title="Awards"
+            detail={
+              <List.Item.Detail
+                markdown={awardsToMarkdown(eventData.awards, eventData)}
+              />
+            }
+            actions={
+              <ActionPanel>
+                <Action.OpenInBrowser
+                  url={`https://www.thebluealliance.com/event/${eventData.key}#awards`}
+                  title="View Awards on TBA"
+                  shortcut={Keyboard.Shortcut.Common.Open}
+                />
+              </ActionPanel>
+            }
+          />
+          {rankings && (
             <List.Item
               title="Rankings"
               detail={
                 <List.Item.Detail markdown={rankingsToMarkdown(rankings)} />
               }
+              actions={
+                <ActionPanel>
+                  <Action.OpenInBrowser
+                    url={`https://www.thebluealliance.com/event/${eventData.key}#rankings`}
+                    title="View Rankings on TBA"
+                    shortcut={Keyboard.Shortcut.Common.Open}
+                  />
+                </ActionPanel>
+              }
             />
-          ) : (
-            <List.Item title="Loading Rankings..." />
           )}
         </>
       )}

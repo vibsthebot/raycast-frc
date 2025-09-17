@@ -117,8 +117,15 @@ query ExampleQuery($number: Int!, $season: Int!) {
   return json.data.teamByNumber;
 }
 
-export default function Command({ arguments: { team } }: { arguments: Arguments.FtcTeam }) {
-  const { data, isLoading, error } = useCachedPromise((team: string) => fetchTeam(team), [team]);
+export default function Command({
+  arguments: { team },
+}: {
+  arguments: Arguments.FtcTeam;
+}) {
+  const { data, isLoading, error } = useCachedPromise(
+    (team: string) => fetchTeam(team),
+    [team],
+  );
 
   if (error || data === null) {
     return <Detail markdown={`# Invalid Team Number\n`} />;
@@ -132,7 +139,10 @@ export default function Command({ arguments: { team } }: { arguments: Arguments.
             title={`Team ${team}`}
             actions={
               <ActionPanel>
-                <Action.OpenInBrowser url={`https://ftcstats.org/team/${team}`} title="View Team on Ftc Stats" />
+                <Action.OpenInBrowser
+                  url={`https://ftcstats.org/team/${team}`}
+                  title="View Team on Ftc Stats"
+                />
               </ActionPanel>
             }
             subtitle={`OPR: ${data.quickStats.tot.value.toFixed(2)}`}
@@ -203,7 +213,11 @@ ${getFTCMatchesTable(event.event.teamMatches, team, event.eventCode)}
   );
 }
 
-function getFTCMatchesTable(matches: MatchData[], team?: string, eventCode?: string): string {
+function getFTCMatchesTable(
+  matches: MatchData[],
+  team?: string,
+  eventCode?: string,
+): string {
   if (!matches || matches.length === 0) return "No matches found.";
   const doubleElim = matches
     .filter((m) => m.match.tournamentLevel === "DoubleElim")
@@ -261,12 +275,16 @@ function getFTCMatchesTable(matches: MatchData[], team?: string, eventCode?: str
 
   let result = "";
   if (qual.length > 0) result += tableSection(qual, "Qualifications");
-  if (doubleElim.length > 0) result += tableSection(doubleElim, "Double Eliminations");
+  if (doubleElim.length > 0)
+    result += tableSection(doubleElim, "Double Eliminations");
   if (finals.length > 0) result += tableSection(finals, "Finals");
   return result.trim() || "No matches found.";
 }
 
-export function getAwardsFTC(awards: { eventCode: string; type: string }[], event: string): string {
+export function getAwardsFTC(
+  awards: { eventCode: string; type: string }[],
+  event: string,
+): string {
   if (!awards || awards.length === 0) return "";
   const types: string[] = [];
   for (const award of awards) {
@@ -276,7 +294,8 @@ export function getAwardsFTC(awards: { eventCode: string; type: string }[], even
         .replace(/^./, (str) => str.toUpperCase())
         .trim();
       const formattedType =
-        regularCaseType.endsWith("Winner") || regularCaseType.endsWith("Finalist")
+        regularCaseType.endsWith("Winner") ||
+        regularCaseType.endsWith("Finalist")
           ? `**${regularCaseType}**`
           : `**${regularCaseType} Award** Winner`;
       types.push(formattedType);
