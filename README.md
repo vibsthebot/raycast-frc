@@ -5,12 +5,7 @@ Statistics for FIRST Robotics Competition and FIRST Tech Challenge right at your
 <img src="./metadata/raycast-frc-1.png" width="300"/> <img src="./metadata/raycast-frc-4.png" width="300"/>
 
 ## Demo
-
-
-
-https://github.com/user-attachments/assets/1bcfa56b-6018-4a30-8346-fc532a395282
-
-
+![GIF of Raycast FRC](https://hc-cdn.hel1.your-objectstorage.com/s/v3/84cf3b7c863e8125d5f5265a38703282cb0cc194_ezgif-268070ae77119a.gif)
 
 ## Features
 
@@ -20,15 +15,10 @@ https://github.com/user-attachments/assets/1bcfa56b-6018-4a30-8346-fc532a395282
 - Uses The Blue Alliance, Statbotics, and FTCScout APIs
 
 ## Installation
-> This extension is not yet available on the Raycast Store, so you will have to manually install it using the command line. 
-```bash
-git clone https://github.com/vibsthebot/raycast-frc.git
-cd raycast-frc
+This extension is availible on the Raycast Store!
+https://raycast.com/vibsthebot/raycast-frc
 
-npm install
-npm run build
-```
-Run the extension in raycast and enter your The Blue Alliance API Key (get one from https://www.thebluealliance.com/account).
+Get a The Blue Alliance API Key (from https://www.thebluealliance.com/account).
 
 ## Commands
 

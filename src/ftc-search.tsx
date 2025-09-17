@@ -158,7 +158,7 @@ From ${item.location.city}, ${item.location.state}, ${item.location.country}
                   <ActionPanel>
                     <Action.OpenInBrowser
                       url={`https://ftcstats.org/team/${item.number}`}
-                      title="View Team on Ftc Stats"
+                      title="View Team on FTC Stats"
                     />
                   </ActionPanel>
                 }
